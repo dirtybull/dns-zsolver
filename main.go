@@ -26,6 +26,8 @@ type options struct {
 
 var opts options
 
+var result []string
+
 func init() {
 	flag.Usage = func() {
 		h := []string{
@@ -94,6 +96,10 @@ func main() {
 
 	if len(opts.targets) > 0 {
 		createResolverPool()
+
+		for _, v := range result {
+			fmt.Println(v)
+		}
 	}
 }
 
@@ -140,10 +146,10 @@ func getResolvers() ([]string, error) {
 			return nil, fmt.Errorf("unable to set workspace to %s : %s", pwd, err)
 		}
 
-		rPath := filepath.Join(pwd, "resolver.txt")
+		rPath := filepath.Join(pwd, "resolvers.txt")
 		f, err := os.Open(rPath)
 		if err != nil {
-			return nil, fmt.Errorf("unable to find/read resolver file in %s : %s", rPath, err)
+			return nil, fmt.Errorf("unable to load resolvers : %s", err)
 		}
 
 		scanner := bufio.NewScanner(f)
@@ -168,6 +174,13 @@ func resolve(resolver string, wg *sync.WaitGroup) {
 	createWorkerPool(resolver, jobs)
 }
 
+func allocateJobs(jobs chan string) {
+	for _, target := range opts.targets {
+		jobs <- target
+	}
+	close(jobs)
+}
+
 func createWorkerPool(resolver string, jobs chan string) {
 	var wg sync.WaitGroup
 	for i := 0; i < opts.rate; i++ {
@@ -181,6 +194,7 @@ func doJobs(resolver string, id int, jobs chan string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for job := range jobs {
+		//fmt.Printf("resolver: %s, worker: %d, target: %s\n", resolver, id, job)
 		r := &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -193,26 +207,26 @@ func doJobs(resolver string, id int, jobs chan string, wg *sync.WaitGroup) {
 			cname, err := r.LookupCNAME(context.Background(), job)
 			if err != nil {
 				if !opts.isSilent {
-					fmt.Fprintf(os.Stderr, "error: %s\n", err)
+					fmt.Fprintf(os.Stderr, "error resolving %s on %s : %s\n", job, resolver, err)
 				}
 
 				continue
 			}
 
 			if job+"." != cname {
-				fmt.Printf("%s CNAME %s\n", job, cname)
+				appendToResult(fmt.Sprintf("%s CNAME %s", job, cname))
 			} else {
 				addrs, err := r.LookupHost(context.Background(), job)
 				if err != nil {
 					if !opts.isSilent {
-						fmt.Fprintf(os.Stderr, "error: %s", err)
+						fmt.Fprintf(os.Stderr, "error resolving %s on %s : %s\n", job, resolver, err)
 					}
 
 					continue
 				}
 
 				for _, a := range addrs {
-					fmt.Printf("%s A %s\n", job, a)
+					appendToResult(fmt.Sprintf("%s A %s", job, a))
 				}
 
 			}
@@ -220,14 +234,14 @@ func doJobs(resolver string, id int, jobs chan string, wg *sync.WaitGroup) {
 			hosts, err := r.LookupAddr(context.Background(), job)
 			if err != nil {
 				if !opts.isSilent {
-					fmt.Fprintf(os.Stderr, "error: %s\n", err)
+					fmt.Fprintf(os.Stderr, "error resolving %s on %s : %s\n", job, resolver, err)
 				}
 
 				continue
 			}
 
 			for _, h := range hosts {
-				fmt.Printf("%s PTR %s\n", job, h)
+				appendToResult(fmt.Sprintf("%s PTR %s", job, h))
 			}
 		}
 
@@ -235,9 +249,12 @@ func doJobs(resolver string, id int, jobs chan string, wg *sync.WaitGroup) {
 	}
 }
 
-func allocateJobs(jobs chan string) {
-	for _, target := range opts.targets {
-		jobs <- target
+func appendToResult(s string) {
+	for _, v := range result {
+		if v == s {
+			return
+		}
 	}
-	close(jobs)
+
+	result = append(result, s)
 }
