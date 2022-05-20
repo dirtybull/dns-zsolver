@@ -33,10 +33,10 @@ func init() {
 		h := []string{
 			"Do DNS resolution(or reverse resolution) on hosts/IPs provided on stdin",
 			"",
-			"Usage: dns-resolver <mode> [-r <ip>] [-c ] [-pt <protocol>] [-p <port>] [-s] [-oD]",
+			"Usage: cat domains.txt | dns-zsolver [-m <mode>] [-R <resolver_ip>] [-r <rate>] [-c ] [-pt <protocol>] [-p <port>] [-s] [-oD]",
 			"",
 			"Options:",
-			"  -m, --mode <fr/rr>           Resolving mode. Valid values: fr: Forward resolution; rr: Reverse resolution",
+			"  -m, --mode <fr/rr>           Resolving mode. Valid values: fr(default): Forward resolution; rr: Reverse resolution",
 			"  -R, --resolver <ip>          IP address of a resolver; If omitted, will look for resolvers.txt in the current workspace",
 			"  -r, --rate <num>             Rate limit(reqs/s) for each resolver. Default: 100 (reqs/s)",
 			"  -P, --protocol <udp/tcp>     Protocol to use for DNS lookups. Valid values: udp(default), tcp",
@@ -52,8 +52,8 @@ func init() {
 
 func main() {
 	var mode string
-	flag.StringVar(&mode, "mode", "", "")
-	flag.StringVar(&mode, "m", "", "")
+	flag.StringVar(&mode, "mode", "fr", "")
+	flag.StringVar(&mode, "m", "fr", "")
 
 	var resolverIP string
 	flag.StringVar(&resolverIP, "resolver", "", "")
@@ -112,7 +112,7 @@ func preCheck() (err error) {
 		return fmt.Errorf("mode is invalid")
 	}
 
-	if len(opts.outputFormat) > 0 && opts.outputFormat != "a" && opts.mode != "s" {
+	if len(opts.outputFormat) > 0 && opts.outputFormat != "a" && opts.outputFormat != "s" {
 		return fmt.Errorf("output format is invalid")
 	}
 
